@@ -165,17 +165,11 @@ const searchProducts = errorHandler(async (req, res) => {
   });
 
   // Retrieving categories if provided
-  if (category) {
-    addLookup("categories", "_id", "product", "categories");
-  }
+  addLookup("categories", "_id", "product", "categories");
   // Retrieving attributes if provided
-  if (attributes.length) {
-    addLookup("attributes", "_id", "product", "attributes");
-  }
+  addLookup("attributes", "_id", "product", "attributes");
   // Retrieving ratings if provided
-  if (rating) {
-    addLookup("review ratings", "_id", "product", "ratings");
-  }
+  addLookup("review ratings", "_id", "product", "ratings");
   // Retrieving vendors
   addLookup("vendors", "vendor", "_id", "vendors");
   // Retrieving Discounts
@@ -191,7 +185,7 @@ const searchProducts = errorHandler(async (req, res) => {
   }
 
   // Filtering with attriutes if provided
-  if (attributes.length) {
+  if (attributes?.length) {
     findCriteria.push({
       $match: {
         $expr: {
@@ -267,83 +261,69 @@ const searchProducts = errorHandler(async (req, res) => {
   const currentPage = parseInt(page) || 1;
   findCriteria.push({ $skip: (currentPage - 1) * 50 }, { $limit: 50 });
 
-  // Grouping documents with necessary fields
-  findCriteria.push({
-    $group: {
-      _id: "$_id",
-      image: { $first: "$images" },
-      name: { $first: "$name" },
-      regularPrice: { $first: "$price" },
-      discountPrice: {
-        $sum: {
-          $reduce: {
-            input: {
-              $map: {
-                input: "$discounts",
-                as: "discount",
-                in: {
-                  $cond: [
-                    { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
-                    "$$discount.fixed",
-                    {
-                      $cond: [
-                        {
-                          $ne: [{ $type: "$$discount.percentage" }, "missing"],
-                        },
-                        {
-                          $multiply: [
-                            { $divide: ["$$discount.percentage", 100] },
-                            "$price",
-                          ],
-                        },
-                        0,
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-            initialValue: 0,
-            in: { $add: ["$$value", "$$this"] },
-          },
-        },
-      },
-      solds: { $first: "$solds" },
-      rating: { $avg: "$ratings.rating" },
-      vendorLogo: { $first: "$vendors.vendorLogo" },
-      vendorName: { $first: "$vendors.vendorName" },
-      categories: { $push: "$categories" },
-      attributes: { $push: "$attributes" },
-    },
-  });
-
   // Including just necessary fields
   findCriteria.push({
     $project: {
-      image: 1,
-      name: 1,
-      price: {
-        regularPrice: "$regularPrice",
-        discountPrice: "$discountPrice",
-      },
-      solds: 1,
-      rating: 1,
-      vendorLogo: "$vendorLogo.logoUrl",
-      vendorName: 1,
-      categories: {
-        $reduce: {
-          input: "$categories",
-          initialValue: [],
-          in: { $concatArrays: ["$$value", "$$this"] },
+      image: { $arrayElemAt: ["$images.imageUrl", 0] },
+      name: "$name",
+      prices: {
+        regularPrice: "$price",
+        discountPrice: {
+          $cond: {
+            if: { $gt: [{ $size: "$discounts" }, 0] },
+            then: {
+              $sum: {
+                $reduce: {
+                  input: {
+                    $map: {
+                      input: "$discounts",
+                      as: "discount",
+                      in: {
+                        $cond: [
+                          { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
+                          "$$discount.fixed",
+                          {
+                            $cond: [
+                              {
+                                $ne: [
+                                  { $type: "$$discount.percentage" },
+                                  "missing",
+                                ],
+                              },
+                              {
+                                $multiply: [
+                                  { $divide: ["$$discount.percentage", 100] },
+                                  "$price",
+                                ],
+                              },
+                              0,
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                  initialValue: 0,
+                  in: { $add: ["$$value", "$$this"] },
+                },
+              },
+            },
+            else: 0,
+          },
         },
       },
-      attributes: {
-        $reduce: {
-          input: "$attributes",
-          initialValue: [],
-          in: { $concatArrays: ["$$value", "$$this"] },
+      solds: "$solds",
+      rating: {
+        $cond: {
+          if: { $gt: [{ $size: "$ratings" }, 0] },
+          then: { $avg: "$ratings.rating" },
+          else: 0,
         },
       },
+      vendorLogo: { $arrayElemAt: ["$vendors.vendorLogo.logoUrl", 0] },
+      vendorName: { $arrayElemAt: ["$vendors.vendorName", 0] },
+      categories: "$categories",
+      attributes: "$attributes",
     },
   });
 
@@ -524,29 +504,40 @@ const getProduct = errorHandler(async (req, res) => {
     {
       $addFields: {
         discount: {
-          $sum: {
-            $map: {
-              input: "$discounts",
-              as: "discount",
-              in: {
-                $cond: [
-                  { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
-                  "$$discount.fixed",
-                  {
+          $cond: {
+            if: { $gt: [{ $size: "$discounts" }, 0] },
+            then: {
+              $sum: {
+                $map: {
+                  input: "$discounts",
+                  as: "discount",
+                  in: {
                     $cond: [
-                      { $ne: [{ $type: "$$discount.percentage" }, "missing"] },
+                      { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
+                      "$$discount.fixed",
                       {
-                        $multiply: [
-                          { $divide: ["$$discount.percentage", 100] },
-                          "$price",
+                        $cond: [
+                          {
+                            $ne: [
+                              { $type: "$$discount.percentage" },
+                              "missing",
+                            ],
+                          },
+                          {
+                            $multiply: [
+                              { $divide: ["$$discount.percentage", 100] },
+                              "$price",
+                            ],
+                          },
+                          0,
                         ],
                       },
-                      0,
                     ],
                   },
-                ],
+                },
               },
             },
+            else: 0,
           },
         },
         stock: {
@@ -558,50 +549,17 @@ const getProduct = errorHandler(async (req, res) => {
       $project: {
         name: 1,
         description: 1,
-        images: {
-          $reduce: {
-            input: "$images",
-            initialValue: [],
-            in: { $concatArrays: ["$$value", "$$this"] },
-          },
+        images: 1,
+        videos: 1,
+        prices: {
+          regularPrice: "$price",
+          discountPrice: "$discount",
         },
-        videos: {
-          $reduce: {
-            input: "$videos",
-            initialValue: [],
-            in: { $concatArrays: ["$$value", "$$this"] },
-          },
-        },
-        discount: 1,
         stock: 1,
-        attributes: {
-          $reduce: {
-            input: "$attributes",
-            initialValue: [],
-            in: { $concatArrays: ["$$value", "$$this"] },
-          },
-        },
-        categories: {
-          $reduce: {
-            input: "$categories",
-            initialValue: [],
-            in: { $concatArrays: ["$$value", "$$this"] },
-          },
-        },
-        tags: {
-          $reduce: {
-            input: "$tags",
-            initialValue: [],
-            in: { $concatArrays: ["$$value", "$$this"] },
-          },
-        },
-        reviewsRatings: {
-          $reduce: {
-            input: "$reviewsRatings",
-            initialValue: [],
-            in: { $concatArrays: ["$$value", "$$this"] },
-          },
-        },
+        attributes: 1,
+        categories: 1,
+        tags: 1,
+        reviewsRatings: 1,
         vendor: { $arrayElemAt: ["$vendor", 0] },
       },
     },
