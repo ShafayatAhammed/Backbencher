@@ -318,7 +318,21 @@ const placeOrder = errorHandler(async (req, res) => {
         as: "categoryDiscounts",
       },
     },
+    {
+      $addFields: {
+        doCheckCoupon: false,
+      },
+    },
   ];
+
+  // Checking for if coupons provided, so add stage of processing of coupons
+  if (coupons.length) {
+    processProducts.push({
+      $addFields: {
+        doCheckCoupon: true,
+      },
+    });
+  }
 
   // Processing attributes if attributeIds given
   if (attributeIds.length) {
@@ -366,7 +380,7 @@ const placeOrder = errorHandler(async (req, res) => {
                       ne: [{ $type: "$$attribute.extraPrice" }, "missing"],
                     },
                     then: "$$attribute.extraPrice",
-                    else: 1,
+                    else: 0,
                   },
                 },
               },
@@ -424,73 +438,97 @@ const placeOrder = errorHandler(async (req, res) => {
     },
     $addFields: {
       discounts: {
-        $filter: {
-          input: "$discounts",
-          as: "discount",
-          cond: {
-            $and: [
-              {
-                $or: [
+        $cond: {
+          if: { $gt: [{ $size: "$discounts" }, 0] },
+          then: {
+            $filter: {
+              input: "$discounts",
+              as: "discount",
+              cond: {
+                $and: [
                   {
-                    $and: [
-                      { $ne: [{ $type: "$$discount.validFrom" }, "missing"] },
-                      { $lte: ["$$discount.validFrom", now] },
+                    $or: [
+                      {
+                        $and: [
+                          {
+                            $ne: [{ $type: "$$discount.validFrom" }, "missing"],
+                          },
+                          { $lte: ["$$discount.validFrom", now] },
+                        ],
+                      },
+                      {
+                        $not: {
+                          $ne: [{ $type: "$$discount.validFrom" }, "missing"],
+                        },
+                      },
                     ],
                   },
                   {
-                    $not: {
-                      $ne: [{ $type: "$$discount.validFrom" }, "missing"],
-                    },
-                  },
-                ],
-              },
-              {
-                $or: [
-                  {
-                    $and: [
-                      { $ne: [{ $type: "$$discount.usageLimit" }, "missing"] },
-                      { $lt: ["$$discount.used", "$$discount.usageLimit"] },
+                    $or: [
+                      {
+                        $and: [
+                          {
+                            $ne: [
+                              { $type: "$$discount.usageLimit" },
+                              "missing",
+                            ],
+                          },
+                          { $lt: ["$$discount.used", "$$discount.usageLimit"] },
+                        ],
+                      },
+                      {
+                        $not: {
+                          $ne: [{ $type: "$$discount.usageLimit" }, "missing"],
+                        },
+                      },
                     ],
                   },
                   {
-                    $not: {
-                      $ne: [{ $type: "$$discount.usageLimit" }, "missing"],
-                    },
-                  },
-                ],
-              },
-              {
-                $or: [
-                  {
-                    $and: [
-                      { $ne: [{ $type: "$$discount.expiryDate" }, "missing"] },
-                      { $gte: ["$$discount.expiryDate", now] },
+                    $or: [
+                      {
+                        $and: [
+                          {
+                            $ne: [
+                              { $type: "$$discount.expiryDate" },
+                              "missing",
+                            ],
+                          },
+                          { $gte: ["$$discount.expiryDate", now] },
+                        ],
+                      },
+                      {
+                        $not: {
+                          $ne: [{ $type: "$$discount.expiryDate" }, "missing"],
+                        },
+                      },
                     ],
                   },
-                  {
-                    $not: {
-                      $ne: [{ $type: "$$discount.expiryDate" }, "missing"],
-                    },
-                  },
                 ],
               },
-            ],
+            },
           },
+          else: "$discounts",
         },
       },
     },
     $addFields: {
       filteredDiscounts: {
-        $filter: {
-          input: "$discounts",
-          as: "discount",
-          cond: {
-            $or: [
-              { $ne: [{ $type: "$$discount.coupon" }, "missing"] },
-              { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
-              { $ne: [{ $type: "$$discount.percentage" }, "missing"] },
-            ],
+        $cond: {
+          if: { $gt: [{ $size: "$discounts" }, 0] },
+          then: {
+            $filter: {
+              input: "$discounts",
+              as: "discount",
+              cond: {
+                $or: [
+                  { $ne: [{ $type: "$$discount.coupon" }, "missing"] },
+                  { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
+                  { $ne: [{ $type: "$$discount.percentage" }, "missing"] },
+                ],
+              },
+            },
           },
+          else: "$discounts",
         },
       },
     },
@@ -521,7 +559,7 @@ const placeOrder = errorHandler(async (req, res) => {
                         },
                       },
                     },
-                    else: 0,
+                    else: "$discounts",
                   },
                 },
               },
@@ -541,23 +579,28 @@ const placeOrder = errorHandler(async (req, res) => {
   const calculateTotalDiscount = {
     $addFields: {
       totalDiscount: {
-        $reduce: {
-          input: "$filteredDiscounts",
-          initialValue: 0,
-          in: {
-            $add: [
-              "$$value",
-              {
-                $cond: {
-                  if: { $gt: [{ $size: coupons }, 0] },
-                  then: {
-                    $add: [
-                      {
+        $cond: {
+          if: { $gt: [{ $size: "$discounts" }, 0] },
+          then: {
+            $reduce: {
+              input: "$filteredDiscounts",
+              initialValue: 0,
+              in: {
+                $add: [
+                  "$$value",
+                  {
+                    $cond: {
+                      if: { $eq: ["$doCheckCoupon", true] },
+                      then: {
                         $cond: {
                           if: {
                             $and: [
-                              { $ne: [{ $type: "$$this.coupon" }, "missing"] },
-                              { $in: ["$$this.coupon.couponCode", coupons] },
+                              {
+                                $ne: [{ $type: "$$this.coupon" }, "missing"],
+                              },
+                              {
+                                $in: ["$$this.coupon.couponCode", coupons],
+                              },
                             ],
                           },
                           then: {
@@ -603,82 +646,48 @@ const placeOrder = errorHandler(async (req, res) => {
                           else: 0,
                         },
                       },
-                      {
+                      else: 0,
+                    },
+                  },
+                  {
+                    $cond: {
+                      if: {
+                        $ne: [{ $type: "$$this.fixed" }, "missing"],
+                      },
+                      then: {
+                        $multiply: ["$$this.fixed", "$quantity"],
+                      },
+                      else: {
                         $cond: {
-                          if: { $ne: [{ $type: "$$this.fixed" }, "missing"] },
-                          then: { $multiply: ["$$this.fixed", "$quantity"] },
-                          else: {
-                            $cond: {
-                              if: {
-                                $ne: [
-                                  { $type: "$$this.percentage" },
-                                  "missing",
-                                ],
-                              },
-                              then: {
-                                $multiply: [
+                          if: {
+                            $ne: [{ $type: "$$this.percentage" }, "missing"],
+                          },
+                          then: {
+                            $multiply: [
+                              {
+                                $divide: [
                                   {
-                                    $divide: [
-                                      {
-                                        $multiply: [
-                                          "$$this.percentage",
-                                          "$subtotal",
-                                        ],
-                                      },
-                                      100,
+                                    $multiply: [
+                                      "$$this.percentage",
+                                      "$subtotal",
                                     ],
                                   },
-                                  "$quantity",
+                                  100,
                                 ],
                               },
-                              else: 0,
-                            },
+                              "$quantity",
+                            ],
                           },
+                          else: 0,
                         },
                       },
-                    ],
+                    },
                   },
-                  else: {
-                    $add: [
-                      {
-                        $cond: {
-                          if: { $ne: [{ $type: "$$this.fixed" }, "missing"] },
-                          then: { $multiply: ["$$this.fixed", "$quantity"] },
-                          else: {
-                            $cond: {
-                              if: {
-                                $ne: [
-                                  { $type: "$$this.percentage" },
-                                  "missing",
-                                ],
-                              },
-                              then: {
-                                $multiply: [
-                                  {
-                                    $divide: [
-                                      {
-                                        $multiply: [
-                                          "$$this.percentage",
-                                          "$subtotal",
-                                        ],
-                                      },
-                                      100,
-                                    ],
-                                  },
-                                  "$quantity",
-                                ],
-                              },
-                              else: 0,
-                            },
-                          },
-                        },
-                      },
-                    ],
-                  },
-                },
+                ],
               },
-            ],
+            },
           },
+          else: 0,
         },
       },
     },
@@ -773,13 +782,7 @@ const placeOrder = errorHandler(async (req, res) => {
       }
     }
 
-    const filteredVendors = theVendors.filter(
-      (vendor) => vendor.vendor === product.vendor[0]._id
-    );
-
-    if (!filteredVendors.length) {
-      theVendors.push({ vendor: product.vendor[0]._id });
-    }
+    theVendors.push({ vendor: product.vendor[0]._id });
 
     const theProduct = {
       productId: product._id,
@@ -797,6 +800,15 @@ const placeOrder = errorHandler(async (req, res) => {
     theProducts.push(theProduct);
   }
 
+  // Filtering unique vendors
+  const uniqueVendors = new Set(
+    theVendors.map((vendor) => vendor.vendor.toString())
+  );
+
+  const uniqueVendorsArray = Array.from(uniqueVendors).map((vendor) => ({
+    vendor: new ObjectId(vendor),
+  }));
+
   // Placing order
   const order = await Order.create({
     customer: user._id,
@@ -812,4 +824,114 @@ const placeOrder = errorHandler(async (req, res) => {
   return responser.sendApiResponse(200, true, "Order has been placed.", order);
 });
 
-export { placeOrder };
+const getMyOrders = errorHandler(async (req, res) => {
+  const responser = new ApiResponser(res);
+  const user = req.user;
+
+  // Retrieving orders
+  const foundOrders = await Order.aggregate([
+    {
+      $match: {
+        customer: user._id,
+      },
+    },
+    {
+      $lookup: {
+        from: "vendors",
+        localField: "vendors.vendor",
+        foreignField: "_id",
+        as: "theVendors",
+      },
+    },
+    {
+      $project: {
+        status: "$status",
+        products: {
+          $map: {
+            input: "$products",
+            as: "product",
+            in: {
+              image: "$$product.image",
+              name: "$$product.name",
+              attributes: "$$product.attributes",
+              price: {
+                $cond: {
+                  if: { $gt: [{ $size: "$$product.attributes" }, 0] },
+                  then: {
+                    $multiply: [
+                      {
+                        $add: [
+                          "$$product.price",
+                          {
+                            $sum: {
+                              $map: {
+                                input: "$$product.attributes",
+                                as: "attribute",
+                                in: {
+                                  $cond: {
+                                    if: {
+                                      $ne: [
+                                        { $type: "$$attribute.extraPrice" },
+                                        "missing",
+                                      ],
+                                    },
+                                    then: "$$attribute.extraPrice",
+                                    else: 0,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        ],
+                      },
+                      "$$product.quantity",
+                    ],
+                  },
+                  else: {
+                    $multiply: ["$$product.price", "$$product.quantity"],
+                  },
+                },
+              },
+              quantity: "$$product.quantity",
+              vendor: {
+                $arrayElemAt: [
+                  {
+                    $map: {
+                      input: "$theVendors",
+                      as: "theVendor",
+                      in: {
+                        $cond: {
+                          if: { $eq: ["$$theVendor._id", "$$product.vendor"] },
+                          then: {
+                            vendorId: "$$theVendor._id",
+                            vendorName: "$$theVendor.vendorName",
+                          },
+                          else: null,
+                        },
+                      },
+                    },
+                  },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  ]);
+
+  // Checking for orders existence
+  if (!foundOrders.length) {
+    return responser.sendApiResponse(404, false, "No orders found!");
+  }
+
+  return responser.sendApiResponse(
+    200,
+    true,
+    "You have been got your orders.",
+    foundOrders
+  );
+});
+
+export { placeOrder, getMyOrders };
