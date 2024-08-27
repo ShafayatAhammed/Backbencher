@@ -213,8 +213,7 @@ const getMyCart = errorHandler(async (req, res) => {
     // Including just necessary fields
     {
       $project: {
-        _id: 1,
-        image: { $first: "$products.images.imageUrl" },
+        image: { $arrayElemAt: ["$products.images.imageUrl", 0] },
         name: "$products.name",
         prices: {
           regularPrice: "$products.price",
@@ -426,8 +425,7 @@ const getUserCart = errorHandler(async (req, res) => {
     // Including just necessary fields
     {
       $project: {
-        _id: 1,
-        image: { $first: "$products.images.imageUrl" },
+        image: { $arrayElemAt: ["$products.images.imageUrl", 0] },
         name: "$products.name",
         prices: {
           regularPrice: "$products.price",
