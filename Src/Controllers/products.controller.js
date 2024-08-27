@@ -164,11 +164,11 @@ const searchProducts = errorHandler(async (req, res) => {
     },
   });
 
-  // Retrieving categories if provided
+  // Retrieving categories
   addLookup("categories", "_id", "product", "categories");
-  // Retrieving attributes if provided
+  // Retrieving attributes
   addLookup("attributes", "_id", "product", "attributes");
-  // Retrieving ratings if provided
+  // Retrieving ratings
   addLookup("review ratings", "_id", "product", "ratings");
   // Retrieving vendors
   addLookup("vendors", "vendor", "_id", "vendors");
