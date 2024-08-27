@@ -188,8 +188,7 @@ const getMyWishlists = errorHandler(async (req, res) => {
     },
     {
       $project: {
-        _id: 1,
-        image: { $first: "$products.images" },
+        image: { $arrayElemAt: ["$products.images.imageUrl", 0] },
         name: "$products.name",
         price: {
           regularPrice: "$products.price",
@@ -394,7 +393,7 @@ const getUserWishlists = errorHandler(async (req, res) => {
     {
       $project: {
         _id: 1,
-        image: { $first: "$products.images" },
+        image: { $arrayElemAt: ["$products.images.imageUrl", 0] },
         name: "$products.name",
         price: {
           regularPrice: "$products.price",
