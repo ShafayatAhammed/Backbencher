@@ -9,7 +9,7 @@ const inventorySchema = new Schema(
       index: true,
     },
     quantity: {
-      type: String,
+      type: Number,
       required: true,
     },
     location: {
@@ -17,15 +17,19 @@ const inventorySchema = new Schema(
       required: true,
     },
     totalPrice: {
-      type: String,
+      type: Number,
       required: true,
     },
     supplier: {
       type: String,
       required: true,
     },
-    reorderAmount: String,
-    reorderPrice: String,
+    isCurrentInventory: {
+      type: Boolean,
+      required: true,
+      default: false,
+      index: true,
+    },
   },
   { timestamps: true }
 );
