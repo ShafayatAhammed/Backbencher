@@ -7,6 +7,7 @@ import Attribute from "../Models/attributes.model.js";
 import Discount from "../Models/discounts.model.js";
 import Address from "../Models/addresses.model.js";
 import Inventory from "../Models/inventories.model.js";
+import Tracking from "../Models/trackings.model.js";
 
 const placeOrder = errorHandler(async (req, res) => {
   const responser = new ApiResponser(res);
@@ -38,7 +39,7 @@ const placeOrder = errorHandler(async (req, res) => {
 
   // Checking for products existence
   const foundProducts = await Product.find({
-    _id: { $in: products.map((product) => product.productId) },
+    _id: { $in: products.map((product) => new ObjectId(product.productId)) },
   });
 
   if (foundProducts.length !== products.length) {
@@ -49,48 +50,38 @@ const placeOrder = errorHandler(async (req, res) => {
       { reason: "ProductIds invalid or duplicate" }
     );
   }
-
   // Check for products availability
   const inventories = await Inventory.find({
-    product: { $in: products.map((product) => product.productId) },
+    product: {
+      $in: products.map((product) => new ObjectId(product.productId)),
+    },
+    isCurrentInventory: true,
   });
 
   if (inventories.length) {
     const filteredInventories = inventories.reduce((acc, inventory) => {
-      const existingInventory = acc.find(
-        (cmnfield) => cmnfield.productId === inventory.product
+      const product = products.find(
+        (product) => product.productId == inventory.product
       );
-      if (!existingInventory) {
-        acc.push({
-          productId: inventory.product,
-          quantity: inventory.quantity,
-        });
-      } else {
-        existingInventory.quantity += inventory.quantity;
+
+      const subtractedQuantity = inventory.quantity - product.quantity;
+
+      if (subtractedQuantity >= 0) {
+        acc.push({ _id: inventory._id });
       }
+
       return acc;
     }, []);
 
-    try {
-      products.forEach((product) => {
-        for (const inventory of filteredInventories) {
-          if (new ObjectId(product.productId) === inventory.productId) {
-            if (
-              product.quantity > inventory.quantity
-                ? product.quantity - inventory.quantity
-                : inventory.quantity - product.quantity
-            ) {
-              continue;
-            }
-          } else {
-            throw new Error("Some out of stock product found!");
-          }
+    if (filteredInventories.length !== inventories.length) {
+      return responser.sendApiResponse(
+        400,
+        false,
+        "Product stock is insufficient!",
+        {
+          reason: "Product stock insufficient",
         }
-      });
-    } catch (err) {
-      return responser.sendApiResponse(400, false, err, {
-        reason: "Some out of stock product",
-      });
+      );
     }
   }
 
@@ -149,7 +140,7 @@ const placeOrder = errorHandler(async (req, res) => {
     }
 
     const theAttributes = await Attribute.find({
-      _id: { $in: attributeIds.map((attribute) => attribute) },
+      _id: { $in: attributeIds.map((attribute) => new ObjectId(attribute)) },
     });
 
     if (theAttributes.length !== attributeIds.length) {
@@ -821,6 +812,97 @@ const placeOrder = errorHandler(async (req, res) => {
     address: addressId,
   });
 
+  // Subtracting stock of products
+  if (inventories.length) {
+    await Inventory.aggregate([
+      {
+        $match: {
+          _id: {
+            $in: inventories.map((inventory) => inventory._id),
+          },
+        },
+      },
+      {
+        $set: {
+          quantity: {
+            $subtract: [
+              "$quantity",
+              {
+                $sum: {
+                  $map: {
+                    input: productIds,
+                    as: "product",
+                    in: {
+                      $cond: {
+                        if: { $eq: ["$$product._id", "$product"] },
+                        then: "$$product.quantity",
+                        else: 0,
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        $merge: {
+          into: "inventories",
+          whenMatched: "merge",
+          whenNotMatched: "discard",
+        },
+      },
+    ]);
+  }
+
+  // Increasing product solds
+  await Product.aggregate([
+    {
+      $match: {
+        _id: {
+          $in: productIds.map((product) => product._id),
+        },
+      },
+    },
+    {
+      $set: {
+        solds: {
+          $add: [
+            "$solds",
+            {
+              $sum: {
+                $map: {
+                  input: productIds,
+                  as: "product",
+                  in: {
+                    $cond: {
+                      if: { $eq: ["$$product._id", "$_id"] },
+                      then: "$$product.quantity",
+                      else: 0,
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+    {
+      $merge: {
+        into: "products",
+        whenMatched: "merge",
+        whenNotMatched: "discard",
+      },
+    },
+  ]);
+
+  // Creating tracking
+  await Tracking.create({
+    order: order._id,
+  });
+
   return responser.sendApiResponse(200, true, "Order has been placed.", order);
 });
 
@@ -934,4 +1016,141 @@ const getMyOrders = errorHandler(async (req, res) => {
   );
 });
 
-export { placeOrder, getMyOrders };
+const getUserOrders = errorHandler(async (req, res) => {
+  const responser = new ApiResponser(res);
+  const user = req.user;
+
+  // Checking for user permission
+  if (user.role !== "ADMIN") {
+    return responser.sendApiResponse(
+      403,
+      false,
+      "You have no permission to access this area!"
+    );
+  }
+
+  const { userId } = req.query;
+
+  // Checking for userid
+  if (!userId) {
+    return responser.sendApiResponse(400, false, "UserId is required!", {
+      reason: "UserId missing",
+    });
+  }
+
+  // Checking for userid validity
+  const { ObjectId } = Types;
+
+  if (!ObjectId.isValid(userId)) {
+    return responser.sendApiResponse(400, false, "UserId is invalid!", {
+      reason: "UserId invalid",
+    });
+  }
+
+  // Retrieving orders
+  const foundOrders = await Order.aggregate([
+    {
+      $match: {
+        customer: new ObjectId(userId),
+      },
+    },
+    {
+      $lookup: {
+        from: "vendors",
+        localField: "vendors.vendor",
+        foreignField: "_id",
+        as: "theVendors",
+      },
+    },
+    {
+      $project: {
+        status: "$status",
+        products: {
+          $map: {
+            input: "$products",
+            as: "product",
+            in: {
+              image: "$$product.image",
+              name: "$$product.name",
+              attributes: "$$product.attributes",
+              price: {
+                $cond: {
+                  if: { $gt: [{ $size: "$$product.attributes" }, 0] },
+                  then: {
+                    $multiply: [
+                      {
+                        $add: [
+                          "$$product.price",
+                          {
+                            $sum: {
+                              $map: {
+                                input: "$$product.attributes",
+                                as: "attribute",
+                                in: {
+                                  $cond: {
+                                    if: {
+                                      $ne: [
+                                        { $type: "$$attribute.extraPrice" },
+                                        "missing",
+                                      ],
+                                    },
+                                    then: "$$attribute.extraPrice",
+                                    else: 0,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        ],
+                      },
+                      "$$product.quantity",
+                    ],
+                  },
+                  else: {
+                    $multiply: ["$$product.price", "$$product.quantity"],
+                  },
+                },
+              },
+              quantity: "$$product.quantity",
+              vendor: {
+                $arrayElemAt: [
+                  {
+                    $map: {
+                      input: "$theVendors",
+                      as: "theVendor",
+                      in: {
+                        $cond: {
+                          if: { $eq: ["$$theVendor._id", "$$product.vendor"] },
+                          then: {
+                            vendorId: "$$theVendor._id",
+                            vendorName: "$$theVendor.vendorName",
+                          },
+                          else: null,
+                        },
+                      },
+                    },
+                  },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  ]);
+
+  // Checking for orders existence
+  if (!foundOrders.length) {
+    return responser.sendApiResponse(404, false, "No orders found!");
+  }
+
+  return responser.sendApiResponse(
+    200,
+    true,
+    "You have been got your orders.",
+    foundOrders
+  );
+});
+
+export { placeOrder, getMyOrders, getUserOrders };
