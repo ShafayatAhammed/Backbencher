@@ -46,9 +46,9 @@ const productSchema = new Schema(
       required: true,
     },
     solds: {
-      type: String,
+      type: Number,
       required: true,
-      default: "0",
+      default: 0,
     },
   },
   { timestamps: true }
