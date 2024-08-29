@@ -120,6 +120,22 @@ const subProductSchema = new Schema({
     type: Number,
     required: true,
   },
+  subtotal: {
+    type: Number,
+    required: true,
+  },
+  shippingCost: {
+    type: Number,
+    required: true,
+  },
+  discount: {
+    type: Number,
+    required: true,
+  },
+  total: {
+    type: Number,
+    required: true,
+  },
   createdAt: {
     type: Date,
     required: true,

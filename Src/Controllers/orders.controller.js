@@ -569,7 +569,7 @@ const placeOrder = errorHandler(async (req, res) => {
   // Calculating total discount
   const calculateTotalDiscount = {
     $addFields: {
-      totalDiscount: {
+      discount: {
         $cond: {
           if: { $gt: [{ $size: "$discounts" }, 0] },
           then: {
@@ -690,7 +690,7 @@ const placeOrder = errorHandler(async (req, res) => {
   const calculateTotal = {
     $addFields: {
       total: {
-        $subtract: [{ $add: ["$subtotal", "$shippingCost"] }, "$totalDiscount"],
+        $subtract: [{ $add: ["$subtotal", "$shippingCost"] }, "$discount"],
       },
     },
   };
@@ -704,14 +704,14 @@ const placeOrder = errorHandler(async (req, res) => {
   const theVendors = [];
   let subtotal = 0;
   let shippingCost = 0;
-  let totalDiscount = 0;
+  let discount = 0;
   let total = 0;
 
   // Processing order
   for (const product of processedProducts) {
     subtotal += product.subtotal;
     shippingCost += product.shippingCost;
-    totalDiscount += product.totalDiscount;
+    discount += product.discount;
     total += product.total;
 
     const categories = [];
@@ -785,6 +785,10 @@ const placeOrder = errorHandler(async (req, res) => {
       discounts: discounts,
       quantity: product.quantity,
       price: product.price,
+      subtotal: product.subtotal,
+      shippingCost: product.shippingCost,
+      discount: product.discount,
+      total: product.total,
       createdAt: product.createdAt,
     };
 
@@ -1151,6 +1155,10 @@ const getUserOrders = errorHandler(async (req, res) => {
     "You have been got your orders.",
     foundOrders
   );
+});
+
+const getOrder = errorHandler(async (req, res) => {
+  const responser = new ApiResponser(res);
 });
 
 export { placeOrder, getMyOrders, getUserOrders };
