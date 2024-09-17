@@ -7,28 +7,39 @@ import Attribute from "../Models/attributes.model.js";
 import Discount from "../Models/discounts.model.js";
 import Address from "../Models/addresses.model.js";
 import Inventory from "../Models/inventories.model.js";
+import Transaction from "../Models/transactions.model.js";
 import Tracking from "../Models/trackings.model.js";
+import productPriceHandler from "../Utils/product-price-handler.js";
 
 const placeOrder = errorHandler(async (req, res) => {
   const responser = new ApiResponser(res);
   const user = req.user;
   const { products } = req.body;
 
+  const productIds = products.map((product) => product.productId);
+
   // Checking for products
-  if (!products?.length) {
+  if (productIds.length !== products?.length) {
     return responser.sendApiResponse(400, false, "Products are required!", {
       reason: "Products missing",
+    });
+  }
+
+  // Checking for quantities
+  const productQuantities = products.map((product) => product.quantity);
+
+  if (productQuantities.length !== productIds.length) {
+    return responser.sendApiResponse(400, false, "Quantities are required!", {
+      reason: "Quantities missing",
     });
   }
 
   // Checking for productids validity
   const { ObjectId } = Types;
 
-  const validProducts = products.filter((product) =>
-    ObjectId.isValid(product.productId)
-  );
+  const validProducts = productIds.filter((id) => ObjectId.isValid(id));
 
-  if (validProducts.length !== products.length) {
+  if (validProducts.length !== productIds.length) {
     return responser.sendApiResponse(
       400,
       false,
@@ -37,12 +48,21 @@ const placeOrder = errorHandler(async (req, res) => {
     );
   }
 
+  // Checking for quantities validity
+  const validQuantities = productQuantities.filter((quantity) => quantity < 1);
+
+  if (validQuantities.length) {
+    return responser.sendApiResponse(400, false, "Quantities are invalid!", {
+      reason: "Quantities invalid",
+    });
+  }
+
   // Checking for products existence
   const foundProducts = await Product.find({
-    _id: { $in: products.map((product) => new ObjectId(product.productId)) },
+    _id: { $in: productIds.map((id) => new ObjectId(id)) },
   });
 
-  if (foundProducts.length !== products.length) {
+  if (foundProducts.length !== productIds.length) {
     return responser.sendApiResponse(
       400,
       false,
@@ -50,10 +70,48 @@ const placeOrder = errorHandler(async (req, res) => {
       { reason: "ProductIds invalid or duplicate" }
     );
   }
+
+  const { paymentMethod } = req.body;
+
+  if (!paymentMethod) {
+    return responser.sendApiResponse(400, false, "PaymentMethod is required!", {
+      reason: "PaymentMethod missing",
+    });
+  }
+
+  const paymentMethods = ["CASH_ON_DELIVERY", "PAYPAL", "STRIPE"];
+
+  if (!paymentMethods.includes(paymentMethod)) {
+    return responser.sendApiResponse(
+      400,
+      false,
+      "PaymentMethod is not valid!",
+      { reason: "PaymentMethod invalid" }
+    );
+  }
+
+  let transactionID = null;
+
+  // Setting transactionId if payment method is paypal
+  if (paymentMethod === "PAYPAL") {
+    const { transactionId } = req.body;
+
+    if (!transactionId) {
+      return responser.sendApiResponse(
+        400,
+        false,
+        "TransactionId is required!",
+        { reason: "TransactionId missing" }
+      );
+    }
+
+    transactionID = transactionId;
+  }
+
   // Check for products availability
   const inventories = await Inventory.find({
     product: {
-      $in: products.map((product) => new ObjectId(product.productId)),
+      $in: productIds.map((id) => new ObjectId(id)),
     },
     isCurrentInventory: true,
   });
@@ -86,16 +144,16 @@ const placeOrder = errorHandler(async (req, res) => {
   }
 
   // Checking for addressId
-  const { addressId } = req.query;
+  const { address } = req.query;
 
-  if (!addressId) {
+  if (!address) {
     return responser.sendApiResponse(400, false, "AddressId is required!", {
       reason: "AddressId missing",
     });
   }
 
   // Checking for addressId validity
-  if (!ObjectId.isValid(addressId)) {
+  if (!ObjectId.isValid(address)) {
     return responser.sendApiResponse(400, false, "AddressId is invalid!", {
       reason: "AddressId invalid",
     });
@@ -110,7 +168,7 @@ const placeOrder = errorHandler(async (req, res) => {
     },
     {
       $match: {
-        _id: new ObjectId(addressId),
+        _id: new ObjectId(address),
       },
     },
   ]);
@@ -122,15 +180,13 @@ const placeOrder = errorHandler(async (req, res) => {
   }
 
   // Checking for attributeIds
-  const attributeIds = req.query.attributeIds
-    ? req.query.attributeIds.split(",")
-    : [];
+  const { attributes } = req.body;
 
   // Checking for the attributes existence if attributeIds provided
-  if (attributeIds.length) {
-    const validAttributeIds = attributeIds.filter((id) => ObjectId.isValid(id));
+  if (attributes?.length) {
+    const validAttributes = attributes.filter((id) => ObjectId.isValid(id));
 
-    if (validAttributeIds.length !== attributeIds.length) {
+    if (validAttributes.length !== attributes.length) {
       return responser.sendApiResponse(
         400,
         false,
@@ -140,10 +196,10 @@ const placeOrder = errorHandler(async (req, res) => {
     }
 
     const theAttributes = await Attribute.find({
-      _id: { $in: attributeIds.map((attribute) => new ObjectId(attribute)) },
+      _id: { $in: attributes.map((id) => new ObjectId(id)) },
     });
 
-    if (theAttributes.length !== attributeIds.length) {
+    if (theAttributes.length !== attributes.length) {
       return responser.sendApiResponse(
         400,
         false,
@@ -153,19 +209,19 @@ const placeOrder = errorHandler(async (req, res) => {
     }
   }
 
-  const coupons = req.query.coupons ? req.query.coupons.split(",") : [];
+  const { coupons } = req.body;
 
   const now = new Date(Date.now());
 
   // Doing certain operation if couponCodes provided
-  if (coupons.length) {
+  if (coupons?.length) {
     // Retrieving couponCodes
     const theCoupons = await Discount.aggregate([
       {
         // Retrieving given couponCodes
         $match: {
           "coupon.couponCode": {
-            $in: coupons.map((coupon) => coupon),
+            $in: coupons,
           },
         },
       },
@@ -227,593 +283,40 @@ const placeOrder = errorHandler(async (req, res) => {
     }
   }
 
-  const productIds = products.map((product) => ({
+  const mergedProducts = products.map((product) => ({
     _id: new ObjectId(product.productId),
     quantity: product.quantity,
   }));
 
-  // Adding default stages and processes
-  const processProducts = [
-    {
-      $match: {
-        _id: {
-          $in: productIds.map((product) => product._id),
-        },
-      },
-    },
-    {
-      $addFields: {
-        quantity: {
-          $let: {
-            vars: {
-              product: {
-                $arrayElemAt: [
-                  {
-                    $filter: {
-                      input: productIds,
-                      as: "product",
-                      cond: { $eq: ["$$product._id", "$_id"] },
-                    },
-                  },
-                  0,
-                ],
-              },
-            },
-            in: "$$product.quantity",
-          },
-        },
-      },
-    },
-    {
-      $lookup: {
-        from: "vendors",
-        localField: "vendor",
-        foreignField: "_id",
-        as: "vendor",
-      },
-    },
-    {
-      $lookup: {
-        from: "categories",
-        localField: "_id",
-        foreignField: "product",
-        as: "categories",
-      },
-    },
-    {
-      $lookup: {
-        from: "attributes",
-        localField: "_id",
-        foreignField: "product",
-        as: "attribtues",
-      },
-    },
-    {
-      $addFields: {
-        discounts: [],
-      },
-    },
-    {
-      $lookup: {
-        from: "discounts",
-        localField: "_id",
-        foreignField: "products.product",
-        as: "productDiscounts",
-      },
-    },
-    {
-      $lookup: {
-        from: "discounts",
-        localField: "categories._id",
-        foreignField: "categories.category",
-        as: "categoryDiscounts",
-      },
-    },
-    {
-      $addFields: {
-        doCheckCoupon: false,
-      },
-    },
-  ];
+  // Processing products
 
-  // Checking for if coupons provided, so add stage of processing of coupons
-  if (coupons.length) {
-    processProducts.push({
-      $addFields: {
-        doCheckCoupon: true,
-      },
-    });
-  }
-
-  // Processing attributes if attributeIds given
-  if (attributeIds.length) {
-    const filterAttributes = {
-      $addFields: {
-        attributes: {
-          $cond: {
-            if: { $gt: [{ $size: "$attribtues" }, 0] },
-            then: {
-              $filter: {
-                input: "$attribtues",
-                as: "attribute",
-                cond: {
-                  $in: [
-                    "$$attribute._id",
-                    attributeIds.map((id) => new ObjectId(id)),
-                  ],
-                },
-              },
-            },
-            else: "$attribtues",
-          },
-        },
-      },
-    };
-
-    processProducts.push(filterAttributes);
-  }
-
-  // Calculating subtotal
-  const calculateSubtotal = {
-    $addFields: {
-      totalExtraPrice: {
-        $cond: {
-          if: { $lt: [{ $size: "$attributes" }, 1] },
-          then: 0,
-          else: {
-            $sum: {
-              $map: {
-                input: "$attributes",
-                as: "attribute",
-                in: {
-                  $cond: {
-                    if: {
-                      ne: [{ $type: "$$attribute.extraPrice" }, "missing"],
-                    },
-                    then: "$$attribute.extraPrice",
-                    else: 0,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    $addFields: {
-      subtotal: {
-        $multiply: [
-          {
-            $cond: {
-              if: { $gt: ["$totalExtraPrice", 0] },
-              then: { $add: ["$price", "$totalExtraPrice"] },
-              else: "$price",
-            },
-          },
-          "$quantity",
-        ],
-      },
-    },
-  };
-
-  processProducts.push(calculateSubtotal);
-
-  // Adding shipping cost
-  const addShippingCost = {
-    $addFields: {
-      shippingCost: 1,
-    },
-  };
-
-  processProducts.push(addShippingCost);
-
-  // Retrieving discounts
-  const findDiscounts = {
-    $addFields: {
-      discounts: {
-        $cond: {
-          if: { $gt: [{ $size: "$productDiscounts" }, 0] },
-          then: { $concatArrays: ["$discounts", "$productDiscounts"] },
-          else: "$discounts",
-        },
-      },
-    },
-    $addFields: {
-      discounts: {
-        $cond: {
-          if: { $gt: [{ $size: "$categoryDiscounts" }, 0] },
-          then: { $concatArrays: ["$discounts", "$categoryDiscounts"] },
-          else: "$discounts",
-        },
-      },
-    },
-    $addFields: {
-      discounts: {
-        $cond: {
-          if: { $gt: [{ $size: "$discounts" }, 0] },
-          then: {
-            $filter: {
-              input: "$discounts",
-              as: "discount",
-              cond: {
-                $and: [
-                  {
-                    $or: [
-                      {
-                        $and: [
-                          {
-                            $ne: [{ $type: "$$discount.validFrom" }, "missing"],
-                          },
-                          { $lte: ["$$discount.validFrom", now] },
-                        ],
-                      },
-                      {
-                        $not: {
-                          $ne: [{ $type: "$$discount.validFrom" }, "missing"],
-                        },
-                      },
-                    ],
-                  },
-                  {
-                    $or: [
-                      {
-                        $and: [
-                          {
-                            $ne: [
-                              { $type: "$$discount.usageLimit" },
-                              "missing",
-                            ],
-                          },
-                          { $lt: ["$$discount.used", "$$discount.usageLimit"] },
-                        ],
-                      },
-                      {
-                        $not: {
-                          $ne: [{ $type: "$$discount.usageLimit" }, "missing"],
-                        },
-                      },
-                    ],
-                  },
-                  {
-                    $or: [
-                      {
-                        $and: [
-                          {
-                            $ne: [
-                              { $type: "$$discount.expiryDate" },
-                              "missing",
-                            ],
-                          },
-                          { $gte: ["$$discount.expiryDate", now] },
-                        ],
-                      },
-                      {
-                        $not: {
-                          $ne: [{ $type: "$$discount.expiryDate" }, "missing"],
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-          else: "$discounts",
-        },
-      },
-    },
-    $addFields: {
-      filteredDiscounts: {
-        $cond: {
-          if: { $gt: [{ $size: "$discounts" }, 0] },
-          then: {
-            $filter: {
-              input: "$discounts",
-              as: "discount",
-              cond: {
-                $or: [
-                  { $ne: [{ $type: "$$discount.coupon" }, "missing"] },
-                  { $ne: [{ $type: "$$discount.fixed" }, "missing"] },
-                  { $ne: [{ $type: "$$discount.percentage" }, "missing"] },
-                ],
-              },
-            },
-          },
-          else: "$discounts",
-        },
-      },
-    },
-  };
-
-  processProducts.push(findDiscounts);
-
-  // Updating shipping cost based on discount
-  const updateShippingCost = {
-    $addFields: {
-      shippingCost: {
-        $cond: {
-          if: {
-            $gt: [
-              {
-                $size: {
-                  $cond: {
-                    if: { $gt: [{ $size: "$discounts" }, 0] },
-                    then: {
-                      $filter: {
-                        input: "$discounts",
-                        as: "discount",
-                        cond: {
-                          $ne: [
-                            { $type: "$$discount.freeShipping" },
-                            "missing",
-                          ],
-                        },
-                      },
-                    },
-                    else: "$discounts",
-                  },
-                },
-              },
-              0,
-            ],
-          },
-          then: 0,
-          else: "$shippingCost",
-        },
-      },
-    },
-  };
-
-  processProducts.push(updateShippingCost);
-
-  // Calculating total discount
-  const calculateTotalDiscount = {
-    $addFields: {
-      discount: {
-        $cond: {
-          if: { $gt: [{ $size: "$discounts" }, 0] },
-          then: {
-            $reduce: {
-              input: "$filteredDiscounts",
-              initialValue: 0,
-              in: {
-                $add: [
-                  "$$value",
-                  {
-                    $cond: {
-                      if: { $eq: ["$doCheckCoupon", true] },
-                      then: {
-                        $cond: {
-                          if: {
-                            $and: [
-                              {
-                                $ne: [{ $type: "$$this.coupon" }, "missing"],
-                              },
-                              {
-                                $in: ["$$this.coupon.couponCode", coupons],
-                              },
-                            ],
-                          },
-                          then: {
-                            $cond: {
-                              if: {
-                                $ne: [
-                                  { $type: "$$this.coupon.fixed" },
-                                  "missing",
-                                ],
-                              },
-                              then: {
-                                $multiply: ["$$this.coupon.fixed", "$quantity"],
-                              },
-                              else: {
-                                $cond: {
-                                  if: {
-                                    $ne: [
-                                      { $type: "$$this.coupon.percentage" },
-                                      "missing",
-                                    ],
-                                  },
-                                  then: {
-                                    $multiply: [
-                                      {
-                                        $divide: [
-                                          {
-                                            $multiply: [
-                                              "$$this.coupon.percentage",
-                                              "$subtotal",
-                                            ],
-                                          },
-                                          100,
-                                        ],
-                                      },
-                                      "$quantity",
-                                    ],
-                                  },
-                                  else: 0,
-                                },
-                              },
-                            },
-                          },
-                          else: 0,
-                        },
-                      },
-                      else: 0,
-                    },
-                  },
-                  {
-                    $cond: {
-                      if: {
-                        $ne: [{ $type: "$$this.fixed" }, "missing"],
-                      },
-                      then: {
-                        $multiply: ["$$this.fixed", "$quantity"],
-                      },
-                      else: {
-                        $cond: {
-                          if: {
-                            $ne: [{ $type: "$$this.percentage" }, "missing"],
-                          },
-                          then: {
-                            $multiply: [
-                              {
-                                $divide: [
-                                  {
-                                    $multiply: [
-                                      "$$this.percentage",
-                                      "$subtotal",
-                                    ],
-                                  },
-                                  100,
-                                ],
-                              },
-                              "$quantity",
-                            ],
-                          },
-                          else: 0,
-                        },
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-          },
-          else: 0,
-        },
-      },
-    },
-  };
-
-  processProducts.push(calculateTotalDiscount);
-
-  // Calculating total
-  const calculateTotal = {
-    $addFields: {
-      total: {
-        $subtract: [{ $add: ["$subtotal", "$shippingCost"] }, "$discount"],
-      },
-    },
-  };
-
-  processProducts.push(calculateTotal);
-
-  // Running product processing
-  const processedProducts = await Product.aggregate(processProducts);
-
-  const theProducts = [];
-  const theVendors = [];
-  let subtotal = 0;
-  let shippingCost = 0;
-  let discount = 0;
-  let total = 0;
-
-  // Processing order
-  for (const product of processedProducts) {
-    subtotal += product.subtotal;
-    shippingCost += product.shippingCost;
-    discount += product.discount;
-    total += product.total;
-
-    const categories = [];
-
-    if (product.categories?.length) {
-      for (const category of product.categories) {
-        categories.push({
-          category: {
-            categoryId: category._id,
-            name: category.name,
-          },
-        });
-      }
-    }
-
-    const attributes = [];
-
-    if (product.attributes?.length) {
-      for (const attribute of product.attribtues) {
-        attributes.push({
-          attribute: {
-            attributeId: attribute._id,
-            name: attribute.name,
-            value: attribute.value,
-            extraPrice: attribute.extraPrice ? attribute.extraPrice : 0,
-          },
-        });
-      }
-    }
-
-    const discounts = [];
-
-    if (product.discounts?.length) {
-      for (const discount of product.discounts) {
-        const theDiscount = {
-          discountId: discount._id,
-          discountType: discount.discountType,
-          discounter: discount.discounter,
-          createdAt: discount.createdAt,
-        };
-
-        const possibleProperties = [
-          "coupon",
-          "percentage",
-          "fixed",
-          "bulk",
-          "freeShipping",
-          "validFrom",
-          "usageLimit",
-          "used",
-          "expiryDate",
-        ];
-
-        possibleProperties.forEach((property) => {
-          if (Object.prototype.hasOwnProperty.call(discount, property)) {
-            theDiscount[property] = discount[property];
-          }
-        });
-      }
-    }
-
-    theVendors.push({ vendor: product.vendor[0]._id });
-
-    const theProduct = {
-      productId: product._id,
-      vendor: product.vendor[0]._id,
-      name: product.name,
-      image: product.images[0],
-      categories: categories,
-      attributes: attributes,
-      discounts: discounts,
-      quantity: product.quantity,
-      price: product.price,
-      subtotal: product.subtotal,
-      shippingCost: product.shippingCost,
-      discount: product.discount,
-      total: product.total,
-      createdAt: product.createdAt,
-    };
-
-    theProducts.push(theProduct);
-  }
+  const { theVendors, theProducts, subtotal, shippingCost, discount, total } =
+    await productPriceHandler(
+      mergedProducts,
+      coupons?.length ? coupons : [],
+      attributes?.length ? attributes : [],
+      false
+    );
 
   // Filtering unique vendors
-  const uniqueVendors = new Set(
+  const vendorSet = new Set(
     theVendors.map((vendor) => vendor.vendor.toString())
   );
 
-  const uniqueVendorsArray = Array.from(uniqueVendors).map((vendor) => ({
+  const vendorSetArray = Array.from(vendorSet).map((vendor) => ({
     vendor: new ObjectId(vendor),
   }));
 
   // Placing order
   const order = await Order.create({
     customer: user._id,
-    vendors: uniqueVendorsArray,
+    vendors: vendorSetArray,
     products: theProducts,
     subtotal,
     shippingCost,
-    discount: totalDiscount,
+    discount,
     total,
-    address: addressId,
+    address: theAddress[0]._id,
   });
 
   // Subtracting stock of products
@@ -834,7 +337,7 @@ const placeOrder = errorHandler(async (req, res) => {
               {
                 $sum: {
                   $map: {
-                    input: productIds,
+                    input: mergedProducts,
                     as: "product",
                     in: {
                       $cond: {
@@ -865,7 +368,7 @@ const placeOrder = errorHandler(async (req, res) => {
     {
       $match: {
         _id: {
-          $in: productIds.map((product) => product._id),
+          $in: productIds.map((id) => new ObjectId(id)),
         },
       },
     },
@@ -877,7 +380,7 @@ const placeOrder = errorHandler(async (req, res) => {
             {
               $sum: {
                 $map: {
-                  input: productIds,
+                  input: mergedProducts,
                   as: "product",
                   in: {
                     $cond: {
@@ -901,6 +404,14 @@ const placeOrder = errorHandler(async (req, res) => {
       },
     },
   ]);
+
+  // Creating transaction
+  await Transaction.create({
+    order: order._id,
+    method: paymentMethod,
+    transactionId: transactionID,
+    status: paymentMethod === "PAYPAL" ? "CAPTURED" : "PENDING",
+  });
 
   // Creating tracking
   await Tracking.create({
@@ -1159,6 +670,243 @@ const getUserOrders = errorHandler(async (req, res) => {
 
 const getOrder = errorHandler(async (req, res) => {
   const responser = new ApiResponser(res);
+  const user = req.user;
+  const { orderId } = req.query;
+
+  // Checking for orderid
+  if (!orderId) {
+    return responser.sendApiResponse(400, false, "OrderId is required!", {
+      reason: "OrderId missing",
+    });
+  }
+
+  // Checking for orderid validity
+  const { ObjectId } = Types;
+
+  if (!ObjectId.isValid(orderId)) {
+    return responser.sendApiResponse(400, false, "OrderId is invalid!", {
+      reason: "OrderId invalid",
+    });
+  }
+
+  const theOrder = await Order.findById(orderId);
+
+  // Checking for order existence
+  if (!theOrder) {
+    return responser.sendApiResponse(404, false, "No order found!");
+  }
+
+  // Checking for user permission
+
+  if (user.role !== "ADMIN") {
+    await theOrder.populate("vendors.vendor");
+
+    const isVendor = theOrder.vendors.find((vendor) => vendor.user == user._id);
+
+    if (!isVendor) {
+      const isCustomer = user._id == theOrder.customer;
+
+      if (!isCustomer) {
+        return responser.sendApiResponse(
+          403,
+          false,
+          "You have no permission to access this area!"
+        );
+      }
+    }
+  }
+
+  // Processing order
+  const processOrderCriteria = [
+    {
+      $match: {
+        _id: theOrder._id,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "customer",
+        foreignField: "_id",
+        as: "theCustomer",
+      },
+    },
+    {
+      $lookup: {
+        from: "vendors",
+        localField: "vendors.vendor",
+        foreignField: "_id",
+        as: "vendors",
+      },
+    },
+    {
+      $lookup: {
+        from: "addresses",
+        localField: "address",
+        foreignField: "_id",
+        as: "theAddress",
+      },
+    },
+    {
+      $lookup: {
+        from: "transactions",
+        localField: "_id",
+        foreignField: "order",
+        as: "transaction",
+      },
+    },
+    {
+      $lookup: {
+        from: "trackings",
+        localField: "_id",
+        foreignField: "order",
+        as: "tracking",
+      },
+    },
+    {
+      $project: {
+        customer: {
+          _id: { $arrayElemAt: ["$theCustomer._id", 0] },
+          avatar: { $arrayElemAt: ["$theCustomer.avatar.avatarUrl", 0] },
+          name: { $arrayElemAt: ["$theCustomer.fullName", 0] },
+          phoneNumber: {
+            $arrayElemAt: ["$theCustomer.phoneNumber", 0],
+          },
+          emailAddress: {
+            $cond: {
+              if: {
+                $eq: [
+                  { $arrayElemAt: ["$theCustomer.emailAddress", 0] },
+                  "missing",
+                ],
+              },
+              then: "None",
+              else: { $arrayElemAt: ["$theCustomer.emailAddress", 0] },
+            },
+          },
+        },
+        vendors: {
+          $map: {
+            input: "$vendors",
+            as: "vendor",
+            in: {
+              _id: "$$vendor._id",
+              vendorLogo: "$$vendor.vendorLogo.logoUrl",
+              vendorName: "$$vendor.vendorName",
+            },
+          },
+        },
+        address: {
+          shippingAddress: {
+            $arrayElemAt: ["$theAddress.shippingAddress", 0],
+          },
+          billingAddress: {
+            $arrayElemAt: ["$theAddress.billingAddress", 0],
+          },
+        },
+        products: {
+          $map: {
+            input: "$products",
+            as: "product",
+            in: {
+              _id: "$$product.productId",
+              name: "$$product.name",
+              image: "$$product.image.imageUrl",
+              categories: "$$product.categories",
+              attributes: "$$product.attributes",
+              vendor: {
+                $arrayElemAt: [
+                  {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: "$vendors",
+                          as: "vendor",
+                          cond: {
+                            $eq: ["$$vendor._id", "$$product.vendor"],
+                          },
+                        },
+                      },
+                      as: "vendor",
+                      in: {
+                        _id: "$$vendor._id",
+                        name: "$$vendor.vendorName",
+                        logo: "$$vendor.vendorLogo.logoUrl",
+                      },
+                    },
+                  },
+                  0,
+                ],
+              },
+              quantity: "$$product.quantity",
+              price: "$$product.price",
+              extraPrice: "$$product.subtotal",
+              discounts: "$$product.discounts",
+              discount: "$$product.discount",
+              shippingCost: "$$product.shippingCost",
+              total: "$$product.total",
+            },
+          },
+        },
+        subtotal: "$subtotal",
+        shippingCost: "$shippingCost",
+        discount: "$discount",
+        total: "$total",
+        paymentMethod: { $arrayElemAt: ["$transaction.method", 0] },
+        shippingActivity: { $arrayElemAt: ["$tracking.event", 0] },
+        shippingMethod: { $arrayElemAt: ["$tracking.method", 0] },
+        shippingDate: { $arrayElemAt: ["$tracking.shippingDate", 0] },
+        shippingStatus: { $arrayElemAt: ["$tracking.status", 0] },
+        paymentStatus: { $arrayElemAt: ["$transaction.status", 0] },
+        orderStatus: "$status",
+        orderedAt: "$createdAt",
+      },
+    },
+  ];
+
+  // Changing data for vendor
+  if (user.role === "VENDOR") {
+    processOrderCriteria[6].$project.vendors = {
+      $map: {
+        input: {
+          $filter: {
+            input: "$vendors",
+            as: "vendor",
+            cond: {
+              $eq: ["$$vendor.user", user._id],
+            },
+          },
+        },
+        as: "vendor",
+        in: {
+          _id: "$$vendor._id",
+          vendorLogo: "$$vendor.vendorLogo.logoUrl",
+          vendorName: "$$vendor.vendorName",
+        },
+      },
+    };
+
+    processOrderCriteria[6].$project.products.$map.input = {
+      $filter: {
+        input: "$products",
+        as: "product",
+        cond: {
+          $eq: ["$$product.vendor", { $first: "$vendors._id" }],
+        },
+      },
+    };
+
+    processOrderCriteria[6].$project.products.$map.in.vendor = {
+      _id: { first: "$vendors._id" },
+      name: { $first: "$vendors.vendorName" },
+      logo: { $first: "$vendors.vendorLogo" },
+    };
+  }
+
+  // Running order find operation
+  const order = await Order.aggregate(processOrderCriteria);
+
+  return responser.sendApiResponse(200, true, "You have got the order.", order);
 });
 
-export { placeOrder, getMyOrders, getUserOrders };
+export { placeOrder, getMyOrders, getUserOrders, getOrder };
