@@ -9,10 +9,7 @@ const generateEmailVerificationToken = (userId) => {
 
     return emailVerificationToken;
   } catch (err) {
-    console.log(
-      "Something went wrong while generating the email verification token!\n"
-    );
-    throw new Error(err);
+    throw err;
   }
 };
 
