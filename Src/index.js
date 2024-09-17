@@ -5,11 +5,7 @@ import twilio from "twilio";
 import { v2 as cloudinary } from "cloudinary";
 import User from "./Models/users.model.js";
 import Vendor from "./Models/vendors.model.js";
-import Product from "./Models/products.model.js";
-import Category from "./Models/categories.model.js";
-import Tag from "./Models/tags.model.js";
 import Address from "./Models/addresses.model.js";
-import Discount from "./Models/discounts.model.js";
 
 config();
 
@@ -106,6 +102,6 @@ connectWithDatabase()
     }
   })
   .catch((err) => {
-    console.error("There are some error after connection with the database!\n");
-    throw new Error(err);
+    console.error("Error after connection with the database!\n");
+    throw err;
   });
