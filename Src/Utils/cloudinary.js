@@ -16,15 +16,13 @@ const cloudinaryUploader = async (localFile, localFileName) => {
     return { url: uploadResult.url, publicId: uploadResult.public_id };
   } catch (err) {
     fs.unlinkSync(localFile);
-    throw new Error(
-      `Something went wrong while uploading to the cloudinary server!\n${err}`
-    );
+    throw new Error(`Cloudinary file upload unsuccessful!\n${err}`);
   }
 };
 
 const cloudinaryDeleter = async (publicId) => {
   try {
-    if (!publicId) throw Error("Public id is required!");
+    if (!publicId) throw new Error("Public id is required!");
 
     const deleteStatus = await cloudinary.uploader.destroy(publicId, {
       invalidate: true,
@@ -34,9 +32,7 @@ const cloudinaryDeleter = async (publicId) => {
       throw new Error("The file not found!");
     }
   } catch (err) {
-    throw new Error(
-      `Something went wrong while deleting file from cloudinary server!\n${err}`
-    );
+    throw new Error(`Cloudinary file deletion unsuccessful!\n${err}`);
   }
 };
 
