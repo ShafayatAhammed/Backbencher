@@ -6,19 +6,19 @@ const emailVerificationSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: "User",
     required: true,
-    index:true
+    index: true,
   },
   emailVerificationToken: {
     type: String,
     required: true,
-    index:true
+    index: true,
   },
   expiryDate: {
     type: Date,
     default: function () {
       return new Date(Date.now() + 5 * 60 * 1000);
     },
-    index:true
+    index: true,
   },
   createdAt: {
     type: Date,
@@ -41,8 +41,7 @@ emailVerificationSchema.pre("save", async function (next) {
 
     next();
   } catch (err) {
-    console.log("There are some error while sending email verification link!");
-    throw new Error(err);
+    throw err;
   }
 });
 
