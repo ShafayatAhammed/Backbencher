@@ -102,6 +102,5 @@ connectWithDatabase()
     }
   })
   .catch((err) => {
-    console.error("Error after connection with the database!\n");
     throw err;
   });
