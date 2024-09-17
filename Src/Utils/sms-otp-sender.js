@@ -7,11 +7,8 @@ const smsOtpSender = async (recipientName, recipientNumber, otpCode) => {
       to: recipientNumber,
       body: `Hi ${recipientName}! Here is your one time otp code : ${otpCode}`,
     });
-
-    console.log("One time otp code has sent successfully.");
   } catch (err) {
-    console.log("One time otp code send unsuccessful!\n");
-    throw new Error(err);
+    throw err;
   }
 };
 
