@@ -7,9 +7,17 @@ import productsRouter from "./Routes/products.route.js";
 import wishlistsRouter from "./Routes/wishlists.route.js";
 import ordersRouter from "./Routes/orders.route.js";
 import cartsRouter from "./Routes/carts.route.js";
+import paypalRouter from "./Routes/paypal.route.js";
+import cors from "cors";
 
 export const app = express();
 
+app.use(
+  cors({
+    origin: ["http://localhost:3000"],
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "1000kb" }));
 app.use(express.urlencoded({ extended: true, limit: "1000kb" }));
 app.use(cookieParser());
@@ -21,3 +29,4 @@ app.use("/api/v1/products", productsRouter);
 app.use("/api/v1/wishlists", wishlistsRouter);
 app.use("/api/v1/orders", ordersRouter);
 app.use("/api/v1/carts", cartsRouter);
+app.use("/api/v1/paypal", paypalRouter);
