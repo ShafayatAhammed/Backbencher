@@ -74,8 +74,7 @@ userSchema.methods.generateAuthTokens = function () {
       refreshToken,
     };
   } catch (err) {
-    console.error("There are some error while generating auth tokens!\n");
-    throw new Error(err);
+    throw err;
   }
 };
 
@@ -89,8 +88,7 @@ userSchema.pre("save", async function (next) {
 
     next();
   } catch (err) {
-    console.error("Something went wrong while encrypting password!\n");
-    throw new Error(err);
+    throw err;
   }
 });
 
