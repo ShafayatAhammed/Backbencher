@@ -45,8 +45,7 @@ otpSchema.pre("save", async function (next) {
 
     next();
   } catch (err) {
-    console.log("There are some error while sending otps!");
-    throw new Error(err);
+    throw err;
   }
 });
 
