@@ -8,10 +8,11 @@ const transactionSchema = new Schema(
       required: true,
     },
     method: {
-      type: Schema.Types.ObjectId,
-      ref: "Payment",
+      type: String,
+      enum: ["CASH_ON_DELIVERY", "PAYPAL", "STRIPE"],
       required: true,
     },
+    transactionId: String,
     status: {
       type: String,
       required: true,
