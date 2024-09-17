@@ -13,7 +13,7 @@ const trackingSchema = new Schema(
       enum: ["STANDARD", "EXPRESS", "SAME DAY"],
       default: "STANDARD",
     },
-    estimateDeliveryDate: {
+    shippingDate: {
       type: Date,
       required: true,
       default: function () {
