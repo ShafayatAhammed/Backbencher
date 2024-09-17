@@ -47,7 +47,7 @@ const paypalOrderCreator = async (total) => {
     const data = await response.json();
     return data.id;
   } catch (err) {
-    throw new Error(err);
+    throw err;
   }
 };
 
@@ -71,7 +71,7 @@ const paypalOrderCapturer = async (orderId) => {
 
     return transactionId;
   } catch (err) {
-    throw new Error(err);
+    throw err;
   }
 };
 
