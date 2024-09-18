@@ -9,6 +9,7 @@ import ordersRouter from "./Routes/orders.route.js";
 import cartsRouter from "./Routes/carts.route.js";
 import paypalRouter from "./Routes/paypal.route.js";
 import cors from "cors";
+import vendorsRouter from "./Routes/vendors.route.js";
 
 export const app = express();
 
@@ -30,3 +31,4 @@ app.use("/api/v1/wishlists", wishlistsRouter);
 app.use("/api/v1/orders", ordersRouter);
 app.use("/api/v1/carts", cartsRouter);
 app.use("/api/v1/paypal", paypalRouter);
+app.use("/api/v1/vendors", vendorsRouter);
