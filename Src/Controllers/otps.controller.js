@@ -12,7 +12,7 @@ const sendEmailOtp = errorHandler(async (req, res) => {
 
   // Checking for required fields
   if (
-    ![fullName, emailAddress].every((field) => field && field.trim() !== "")
+    ![fullName, emailAddress].every((field) => field && field?.trim() !== "")
   ) {
     return responser.sendApiResponse(
       400,
@@ -65,7 +65,9 @@ const sendSmsOtp = errorHandler(async (req, res) => {
   const { fullName, phoneNumber } = req.body;
 
   // Checing for required fields
-  if (![fullName, phoneNumber].every((field) => field && field.trim() !== "")) {
+  if (
+    ![fullName, phoneNumber].every((field) => field && field?.trim() !== "")
+  ) {
     return responser.sendApiResponse(
       400,
       false,
