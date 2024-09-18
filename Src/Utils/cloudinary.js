@@ -3,8 +3,10 @@ import fs from "fs";
 
 const cloudinaryUploader = async (localFile, localFileName) => {
   try {
-    if (!localFile && !localFileName)
-      throw new Error("The file path and name is required!");
+    if (!localFile) throw new Error("The file path required!");
+    else if (!localFileName) {
+      throw new Error("The file name is required!");
+    }
 
     const uploadResult = await cloudinary.uploader.upload(localFile, {
       public_id: localFileName,
