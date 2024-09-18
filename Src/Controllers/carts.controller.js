@@ -459,9 +459,7 @@ const getUserCart = errorHandler(async (req, res) => {
 const removeFromCart = errorHandler(async (req, res) => {
   const responser = new ApiResponser(res);
   const user = req.user;
-  const productIds = req.query.productIds
-    ? req.query.productIds.split(",")
-    : [];
+  const productIds = req.body.productIds ? req.body.productIds : [];
 
   // Checking for productids
   if (!productIds.length) {
