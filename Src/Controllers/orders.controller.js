@@ -909,4 +909,86 @@ const getOrder = errorHandler(async (req, res) => {
   return responser.sendApiResponse(200, true, "You have got the order.", order);
 });
 
-export { placeOrder, getMyOrders, getUserOrders, getOrder };
+const updateOrderStatus = errorHandler(async (req, res) => {
+  const responser = new ApiResponser(res);
+  const user = req.user;
+
+  // Checking for user permission
+  if (user.role !== "ADMIN") {
+    return responser.sendApiResponse(
+      403,
+      false,
+      "You have no permission to access this area!"
+    );
+  }
+
+  const statuses = [
+    "PENDING APPROVAL",
+    "APPROVED",
+    "PROCESSING",
+    "PACKAGING",
+    "AWAITING DISPATCH",
+    "SHIPPED",
+    "IN TRANSIT",
+    "OUT FOR DELIVERY",
+    "DELIVERED",
+    "COMPLETED",
+    "RETURNED",
+    "CANCELLED",
+    "ON HOLD",
+    "FAILED PAYMENT",
+  ];
+
+  const { status } = req.query;
+
+  if (!status) {
+    return responser.sendApiResponse(400, false, "Status is required!", {
+      reason: "Status missing",
+    });
+  }
+
+  if (!statuses.includes(status)) {
+    return responser.sendApiResponse(400, false, "Status is not valid!", {
+      reason: "Status invalid",
+    });
+  }
+
+  const { orderId } = req.query;
+
+  // Checking for orderid
+  if (!orderId) {
+    return responser.sendApiResponse(400, false, "OrderId is required!", {
+      reason: "OrderId missing",
+    });
+  }
+
+  // Checking for orderid validity
+
+  const { ObjectId } = Types;
+
+  if (!ObjectId.isValid(orderId)) {
+    return responser.sendApiResponse(400, false, "OrderId is not valid!", {
+      reason: "OrderId invalid",
+    });
+  }
+
+  const order = await Order.findById(orderId);
+
+  // Checking for order existence
+
+  if (!order) {
+    return responser.sendApiResponse(404, false, "No order found!");
+  }
+
+  if (order.status === status) {
+    return responser.sendApiResponse(400, false, "Status change required!", {
+      reason: "Status unchanged",
+    });
+  }
+
+  await Order.updateOne({ _id: order._id }, { $set: { status } });
+
+  return responser.sendApiResponse(200, true, "Order status updated.");
+});
+
+export { placeOrder, getMyOrders, getUserOrders, getOrder, updateOrderStatus };
