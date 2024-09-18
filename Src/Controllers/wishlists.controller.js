@@ -427,9 +427,7 @@ const getUserWishlists = errorHandler(async (req, res) => {
 const removeProductFromMyWishlist = errorHandler(async (req, res) => {
   const responser = new ApiResponser(res);
   const user = req.user;
-  const wishlistIds = req.query.wishlistIds
-    ? req.query.wishlistIds.split(",")
-    : [];
+  const wishlistIds = req.body.wishlistIds ? req.body.wishlistIds : [];
 
   // Checking for wishlistids
   if (!wishlistIds.length) {
