@@ -26,7 +26,7 @@ export const registerUser = errorHandler(async (req, res) => {
   // Checking for required fields
   if (
     ![fullName, phoneNumber, password, confirmPassword, otpCode].every(
-      (field) => field || field.trim() !== ""
+      (field) => field && field?.trim() !== ""
     )
   ) {
     if (req?.file) fs.unlinkSync(req.file.path); // Clean up uploaded file if validation fails
@@ -109,7 +109,7 @@ export const loginUser = errorHandler(async (req, res) => {
   // Checking for required fields
   if (
     ![phoneNumber || emailAddress, password /*otpCode*/].every(
-      (field) => field && field.trim() !== ""
+      (field) => field && field?.trim() !== ""
     )
   ) {
     return responser.sendApiResponse(
@@ -254,7 +254,7 @@ export const resetPassword = errorHandler(async (req, res) => {
   // Checking for required fields
   if (
     ![oldPassword, newPassword, confirmNewPassword, otpCode].every(
-      (field) => field && field.trim() !== ""
+      (field) => field && field?.trim() !== ""
     )
   ) {
     return responser.sendApiResponse(
@@ -779,7 +779,7 @@ export const addMyAddresses = errorHandler(async (req, res) => {
 
   if (
     ![shippingAddress, billingAddress].every(
-      (field) => field && field.trim() !== ""
+      (field) => field && field?.trim() !== ""
     )
   ) {
     return responser.sendApiResponse(
@@ -826,7 +826,7 @@ export const addUserAddresses = errorHandler(async (req, res) => {
   // Checking for addresses
   if (
     ![shippingAddress, billingAddress].every(
-      (field) => field && field.trim() !== ""
+      (field) => field && field?.trim() !== ""
     )
   ) {
     return responser.sendApiResponse(
@@ -961,7 +961,7 @@ export const changeUserAddresses = errorHandler(async (req, res) => {
   // Checking for required fields
   if (
     ![shippingAddress, billingAddress].every(
-      (field) => field && field.trim() !== ""
+      (field) => field && field?.trim() !== ""
     )
   ) {
     return responser.sendApiResponse(
