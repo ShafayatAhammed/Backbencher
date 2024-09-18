@@ -5,12 +5,9 @@ import ApiResponser from "../Utils/api-responser.js";
 
 const authenticationVerifier = errorHandler(async (req, res, next) => {
   const responser = new ApiResponser(res);
-  // const oAuthToken = req.headers["authorization"].split(" ")[1];
   const accessToken = req.cookies?.accessToken;
 
-  /*if (oAuthToken) {
-    
-  } else */ if (accessToken) {
+  if (accessToken) {
     const isTokenVerified = jwt.verify(
       accessToken,
       process.env.SECRET_ACCESS_KEY
