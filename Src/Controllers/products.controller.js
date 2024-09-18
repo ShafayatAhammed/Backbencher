@@ -22,8 +22,9 @@ const addProduct = errorHandler(async (req, res) => {
   const { name, description, price } = req.body;
 
   if (
-    ![name, description].every((field) => field && field.trim() !== "") ||
-    (price && price < 3)
+    ![name, description].every((field) => field && field?.trim() !== "") &&
+    price &&
+    price < 3
   ) {
     return responser.sendApiResponse(
       400,
@@ -235,7 +236,7 @@ const searchProducts = errorHandler(async (req, res) => {
   }
 
   // Checking for pmin and pmax validity
-  if ((pmin && !pmax) || (!pmin && pmax)) {
+  if (!(pmin && pmax)) {
     return responser.sendApiResponse(
       400,
       false,
@@ -595,15 +596,19 @@ const updateProduct = errorHandler(async (req, res) => {
   const { name, description, price } = req.body;
 
   if (
-    [name, description, price].some((field, index) =>
-      !field || index <= 1 ? field?.trim() === "" : field < 3
+    !(
+      (
+        (name && name.trim() !== "") || // Check if 'name' is provided
+        (description && description.trim() !== "") || // Check if 'description' is provided
+        (price && price >= 3)
+      ) // Check if 'price' is provided and at least 3 dollars
     )
   ) {
     return responser.sendApiResponse(
       400,
       false,
-      "At least one field is required!",
-      { reason: "Fields missing" }
+      "At least one field (name, description, or price) is required, and price must be at least 3 dollars if provided!",
+      { reason: "Fields missing or price too low" }
     );
   }
 
@@ -715,11 +720,15 @@ const updateProduct = errorHandler(async (req, res) => {
     description !== foundProduct[0].description
   ) {
     updateFields.$set.description = description;
-    hasChanged = true;
+    if (!hasChanged) {
+      hasChanged = true;
+    }
   }
-  if (price && price.trim() !== "" && price !== foundProduct[0].price) {
+  if (price && price !== foundProduct[0].price) {
     updateFields.$set.price = price;
-    hasChanged = true;
+    if (!hasChanged) {
+      hasChanged = true;
+    }
   }
 
   // Checking for if no fields changed
@@ -927,8 +936,8 @@ const deleteProductImagesVideos = errorHandler(async (req, res) => {
     );
   }
 
-  const imageIds = req.query.imageIds ? req.query.imageIds.split(",") : [];
-  const videoIds = req.query.videoIds ? req.query.videoIds.split(",") : [];
+  const imageIds = req.body.imageIds ? req.body.imageIds : [];
+  const videoIds = req.body.videoIds ? req.body.videoIds : [];
 
   // Checking for if at least one image or video id provided
   if (!imageIds.length && !videoIds.length) {
@@ -1142,9 +1151,7 @@ const deleteProducts = errorHandler(async (req, res) => {
     );
   }
 
-  const productIds = req.query.productIds
-    ? req.query.productIds.split(",")
-    : [];
+  const productIds = req.query.body ? req.body.productIds : [];
 
   // Checking for productids
   if (!productIds.length) {
