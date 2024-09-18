@@ -16,6 +16,12 @@ const placeOrder = errorHandler(async (req, res) => {
   const user = req.user;
   const { products } = req.body;
 
+  if (!products?.length) {
+    return responser.sendApiResponse(400, false, "Products are required!", {
+      reason: "Products missing",
+    });
+  }
+
   const productIds = products.map((product) => product.productId);
 
   // Checking for products
