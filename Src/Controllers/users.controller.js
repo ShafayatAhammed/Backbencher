@@ -5,7 +5,7 @@ import errorHandler from "../Utils/error-handler.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import fs from "fs";
-import emailVerificationSender from "../Utils/emailVerificationSender.js";
+import emailVerificationSender from "../Utils/email-verification-sender.js";
 import generateEmailVerificationToken from "../Utils/email-verification-token-generator.js";
 import Otp from "../Models/otps.model.js";
 import Address from "../Models/addresses.model.js";
