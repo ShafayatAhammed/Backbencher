@@ -17,7 +17,7 @@ const discountSchema = new Schema(
     fixed: Number,
     bulk: {
       buy: Number,
-      get: Number
+      get: Number,
     },
     freeShipping: Boolean,
     products: [
@@ -50,29 +50,13 @@ const discountSchema = new Schema(
     },
     expiryDate: {
       type: Date,
-      index: true,
+      index: {
+        expires: 0,
+      },
     },
   },
   { timestamps: true }
 );
-
-discountSchema.pre("save", async function (next) {
-  if (this.expiryDate && this.isModified("expiryDate")) {
-    const indexes = await this.collection.indexes();
-    const isIndexExists = indexes.some(
-      (index) => index.key.expiryDate && index.expireAfterSeconds === 0
-    );
-
-    if (!isIndexExists) {
-      await this.collection.createIndex(
-        { expiryDate: 1 },
-        { expireAfterSeconds: 0 }
-      );
-    }
-  }
-
-  next();
-});
 
 const Discount = model("Discount", discountSchema);
 
