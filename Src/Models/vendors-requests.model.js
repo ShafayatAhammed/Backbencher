@@ -53,8 +53,14 @@ const vendorsRequestsSchema = new Schema(
     status: {
       type: String,
       required: true,
-      enum: ["PENDING", "PROCCESSING", "APPROVED", "REJECTED"],
+      enum: ["PENDING", "PROCESSING", "APPROVED", "REJECTED"],
       default: "PENDING",
+    },
+    expiryDate: {
+      type: Date,
+      index: {
+        expires: 0,
+      },
     },
   },
   { timestamps: true }
