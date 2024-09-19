@@ -31,4 +31,4 @@ app.use("/api/v1/wishlists", wishlistsRouter);
 app.use("/api/v1/orders", ordersRouter);
 app.use("/api/v1/carts", cartsRouter);
 app.use("/api/v1/paypal", paypalRouter);
-app.use("/api/v1/vendors", vendorRequestsRouter);
+app.use("/api/v1/vendor-requests", vendorRequestsRouter);
