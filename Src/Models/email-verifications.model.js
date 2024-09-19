@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-import emailVerificationSender from "../Utils/emailVerificationSender.js";
+import emailVerificationSender from "../Utils/email-verification-sender.js";
 
 const emailVerificationSchema = new Schema({
   user: {
@@ -18,12 +18,9 @@ const emailVerificationSchema = new Schema({
     default: function () {
       return new Date(Date.now() + 5 * 60 * 1000);
     },
-    index: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    expires: 60 * 5,
+    index: {
+      expires: 0,
+    },
   },
 });
 
