@@ -18,6 +18,6 @@ ordersRouter
 ordersRouter.route("/get-order").get(authenticationVerifier, getOrder);
 ordersRouter
   .route("/update-order-status")
-  .path(authenticationVerifier, updateOrderStatus);
+  .patch(authenticationVerifier, updateOrderStatus);
 
 export default ordersRouter;
