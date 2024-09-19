@@ -60,6 +60,10 @@ const vendorsRequestsSchema = new Schema(
       enum: ["PENDING", "PROCESSING", "APPROVED", "REJECTED"],
       default: "PENDING",
     },
+    reason: {
+      type: String,
+      required: true,
+    },
     expiryDate: {
       type: Date,
       index: {
