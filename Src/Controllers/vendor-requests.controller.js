@@ -341,6 +341,7 @@ const rejectVendorRequest = errorHandler(async (req, res) => {
   await request.updateOne({
     $set: {
       status: "REJECTED",
+      reason: rejectReason,
       expiryDate: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
     },
   });
