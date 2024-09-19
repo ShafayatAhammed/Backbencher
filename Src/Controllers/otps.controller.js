@@ -2,7 +2,7 @@ import Otp from "../Models/otps.model.js";
 import User from "../Models/users.model.js";
 import ApiResponser from "../Utils/api-responser.js";
 import generateEmailVerificationToken from "../Utils/email-verification-token-generator.js";
-import emailVerificationSender from "../Utils/emailVerificationSender.js";
+import emailVerificationSender from "../Utils/email-verification-sender.js";
 import errorHandler from "../Utils/error-handler.js";
 import generateOtpCode from "../Utils/otp-generator.js";
 
