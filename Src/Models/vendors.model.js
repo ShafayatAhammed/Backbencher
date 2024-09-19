@@ -50,20 +50,26 @@ const vendorsSchema = new Schema(
       logoUrl: {
         type: String,
         required: true,
+        default:
+          "https://res.cloudinary.com/dhvsm6zit/image/upload/v1723102449/martina_logo.png",
       },
       logoPublicId: {
         type: String,
         required: true,
+        default: "martina_logo",
       },
     },
     vendorBanner: {
       bannerUrl: {
         type: String,
         required: true,
+        default:
+          "https://res.cloudinary.com/dhvsm6zit/image/upload/v1723102450/martina_banner.png",
       },
       bannerPublicId: {
         type: String,
         required: true,
+        default: "martina_banner",
       },
     },
     vendorPhoneNumber: {
