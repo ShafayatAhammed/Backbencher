@@ -5,7 +5,9 @@ import errorHandler from "../Utils/error-handler.js";
 import {
   sendApprovalEmail,
   sendRejectionEmail,
-} from "../Utils/vendor-request-email-sender.js";
+} from "../Utils/vendorData-request-email-sender.js";
+import Vendor from "../Models/vendors.model.js";
+import Earning from "../Models/earnings.model.js";
 
 const applyToBecomeVendor = errorHandler(async (req, res) => {
   const responser = new ApiResponser(res);
@@ -16,6 +18,7 @@ const applyToBecomeVendor = errorHandler(async (req, res) => {
     vendorType,
     vendorPhoneNumber,
     vendorEmailAddress,
+    vendorAddress,
   } = req.body;
 
   // Checking for required fields
@@ -26,6 +29,7 @@ const applyToBecomeVendor = errorHandler(async (req, res) => {
       vendorType,
       vendorPhoneNumber,
       vendorEmailAddress,
+      vendorAddress,
     ].every((field) => {
       return field && field?.trim() !== "";
     })
@@ -119,20 +123,25 @@ const applyToBecomeVendor = errorHandler(async (req, res) => {
     vendorType,
     vendorPhoneNumber,
     vendorEmailAddress,
+    vendorAddress,
   };
 
   // Setting legal documents
   if (vendorType === "INDIVIDUAL") {
-    vendorData.vendorGovernmentId = governmentId;
+    vendorData.vendorGovernmentIdNumber = governmentId;
   } else if (vendorType === "BUSINESS") {
     vendorData.vendorTradeLicenseNumber = tradeLicenseNumber;
     vendorData.vendorTIN = TIN;
   }
 
-  // Applying to become a vendor
+  // Applying to become a vendorData
   await VendorRequest.create(vendorData);
 
-  return responser.sendApiResponse(200, true, "Applied to become a vendor.");
+  return responser.sendApiResponse(
+    200,
+    true,
+    "Applied to become a vendorData."
+  );
 });
 
 const getVendorRequest = errorHandler(async (req, res) => {
@@ -178,7 +187,7 @@ const getVendorRequest = errorHandler(async (req, res) => {
   return responser.sendApiResponse(
     200,
     true,
-    "You have got the vendor request.",
+    "You have got the vendorData request.",
     request
   );
 });
@@ -222,11 +231,43 @@ const approveVendorRequest = errorHandler(async (req, res) => {
   // Getting user
   await request.populate("user");
 
-  // Giving user vendor role if not
+  // Giving user vendorData role if not
   if (request.user.role !== "VENDOR") {
     request.user.role = "VENDOR";
     await request.user.save();
   }
+
+  // Creating vendor
+  const vendorData = {
+    user: request.user._id,
+    vendorName: request.vendorName,
+    vendorDescription: request.vendorDescription,
+    vendorCategory: request.vendorCategory,
+    vendorType: request.vendorType,
+    vendorPhoneNumber: {
+      phoneNumber: request.vendorPhoneNumber,
+    },
+    vendorEmailAddress: {
+      emailAddress: request.vendorEmailAddress,
+    },
+    vendorAddress: {
+      address: request.vendorAddress,
+    },
+  };
+
+  if (request.vendorType === "INDIVIDUAL") {
+    vendorData.vendorGovernmentIdNumber = request.vendorGovernmentIdNumber;
+  } else if (request.vendorType === "BUSINESS") {
+    vendorData.vendorTradeLicenseNumber = request.vendorTradeLicenseNumber;
+    vendorData.vendorTIN = request.vendorTIN;
+  }
+
+  const theVendor = await Vendor.create(vendorData);
+
+  // Creating earning for vendor
+  await Earning.create({
+    vendor: theVendor._id,
+  });
 
   // Sending approval email
   await sendApprovalEmail(request.vendorName, request.vendorEmailAddress);
