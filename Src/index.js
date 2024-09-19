@@ -25,7 +25,7 @@ connectWithDatabase()
     const port = process.env.PORT || 8001;
 
     app.listen(port, () => {
-      console.log(`The server is running at port no : ${port}.`);
+      console.log(`Server is running. Port : ${port}.`);
     });
 
     const isAdminExists = await User.findOne({
