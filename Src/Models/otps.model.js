@@ -24,12 +24,9 @@ const otpSchema = new Schema({
     default: function () {
       return new Date(Date.now() + 5 * 60 * 1000);
     },
-    index: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    expires: 60 * 5,
+    index: {
+      expires: 0,
+    },
   },
 });
 
